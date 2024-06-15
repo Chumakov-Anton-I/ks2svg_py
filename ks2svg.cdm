@@ -1,0 +1,316 @@
+# coding: cp1251
+# ks2svg | Experimental tool for converting KOMPAS-doc to SVG-format
+# Version 0.3beta for Python 2.X (v2.6 and newer) - Class based
+# Chumakov Anton I., Juny 2021
+# Last revised: Aug 15, 2022
+
+import pythoncom    # Требуется для интерактивной работы из-под Компаса
+from tkinter import *
+from tkinter.scrolledtext import ScrolledText
+import tkinter.filedialog as tkFileDialog
+import tkinter.messagebox as tkMessageBox
+from svgmodule import CDocument, iApplication
+import re
+
+## Global constants
+HEIGHT = 297.0  # [mm] \
+WIDTH  = 210.0  # [mm] - sheet A4
+S_LINE = 0.42   # [mm] thickness of main lines
+OVERHANG = 2.0  # [mm] overhang of leader lines (2 mm in ESKD)
+D_POINT = 1.2   # [mm] diameter of points
+TOLERANCE = 0.1 # [mm] tolerance of curve-approximation
+KEGEL = 4   # [px] fonts height
+
+## Text constants (for localization)
+MSGTITLE = 'Converting FRW to SVG'
+MSGWRONGTYPE = 'Активный документ не является КОМПАС-фрагментом'
+MSGSUCCESS = 'Преобразование успешно завершено!'
+MSGMISSINGDOC = 'Отсутствует открытый документ'
+MSGCANTSAVE = 'Ошибка записи файла'
+MSGERRCONVERT = 'Ошибка преобразования!'
+# HINTS
+TIP_CURVE = 'Преобразование кривых Безье и NURBS.\nПримечание: NURBS аппроксимируются набором отрезков.'
+TIP_POLYG = 'Преобразование прямоугольников и правильных многоугольников'
+TIP_GRAYS = 'Преобразовать цвет заливок в оттенки серого,\nостальных объектов в чёрный'
+TIP_RASTR = 'Преобразование связанных растровых изображений.\nВнимание: внедерённые изображения пропускаются.'
+TIP_FITCN = 'Подгонять размер изображения\nк габаритам объектов фрагмента'
+
+## ================== Helper GUI classes ===================
+class CToolTip(object):
+    """ Provides the pop-up hint for a widget
+        Usage: Add to constructor of a widget this (or similar) code:
+           self.tip = CToolTip(self, text="Hint's message")
+           self.bind('<Enter>', lambda event: self.tip.show())
+           self.bind('<Leave>', lambda event: self.tip.hide())
+    """
+    # Based by source from StackOverflow.com
+    def __init__(self, widget, text=''):
+        self.widget = widget
+        self.tipwindow = None
+        self.text = text
+        #self.x = self.y = 0    # What the fuck?
+    def show(self):
+        """ It displays text in tooltip window """
+        if self.tipwindow or not self.text:
+            return
+        x, y, cx, cy = self.widget.bbox('insert')
+        x += self.widget.winfo_rootx() + 57      # offset tipwindow from parent widget
+        y += cy + self.widget.winfo_rooty() + 27 #
+        self.tipwindow = tw = Toplevel(self.widget)
+        tw.wm_overrideredirect(1)
+        tw.wm_geometry('+%d+%d' %(x, y))
+        tw.attributes('-topmost', True)
+        Label(tw, text=self.text, justify=LEFT, bg='#ffffe0', bd=1,
+              relief=SOLID, font=('tahoma', '8', 'normal')).pack(ipadx=1)
+    def hide(self):
+        """ It hides tip """
+        tw = self.tipwindow
+        self.tipwindow = None
+        if tw: tw.destroy()
+
+class CUCheckbutton(Checkbutton):
+    """ Subclass of Checkbutton with support pop-up tip """
+    def __init__(self, parent=None, text='', tip='', on=True, **options):
+        self.var = BooleanVar(value=on)
+        Checkbutton.__init__(self, parent, text=text, variable=self.var, onvalue=True, offvalue=False, **options)
+        if tip:
+            self.tip = CToolTip(self, tip)
+            self.bind('<Enter>', lambda event: self.tip.show())
+            self.bind('<Leave>', lambda event: self.tip.hide())
+    def getVar(self):
+        return self.var.get()
+
+class CUCheckbuttonG(CUCheckbutton):
+    """ Subclass of CUCheckbutton with auto placement to grid-method """
+    def __init__(self, parent=None, text='', c=None, r=None, on=True, tip='', **options):
+        CUCheckbutton.__init__(self, parent, text=text, tip=tip, on=on, **options)
+        self.grid(column=c, row=r, sticky=W)
+
+class CFloatEntry(Entry):
+    def __init__(self, master=None, cnf={}, **kw):
+        """Construct an entry widget with the parent MASTER.
+        Also, checks the input to float number.
+
+        See Tkinter's class Entry for more information. """
+        Entry.__init__(self, master=master, cnf=cnf, **kw)
+        self.pattern = re.compile(r'^(\d+)*(\.\d{0,})?$')
+        vcmd = (self.register(self._valid_in), '%P')
+        self['validate'] = 'key'
+        self['validatecommand'] = vcmd
+
+    def _valid_in(self, p):
+        if not p: return True   # an empty string is legal too
+        mo = self.pattern.match(p)
+        if not mo: return False
+        val = [g for g in mo.groups() if g is not None]
+        self.val = ''.join(val)
+        return True
+
+## ================== Main Window class ====================
+class CMainWindow(Frame):
+    def __init__(self, parent=None, document=None, **options):
+        self.document = document
+        Frame.__init__(self, parent, **options)
+        self.topFrame = Frame(self)
+        self.topFrame.pack(side=TOP, expand=YES, fill=BOTH)
+        self._makeOptions()
+        self._makeCommand()
+        self._makeStateLine()
+        self.winHelp = None
+
+    def _makeOptions(self):
+        ## Make subframe for options
+        self.Options = Frame(self.topFrame) # MainFrame/topFrame/Options
+        self.Options.pack(side=LEFT)
+        self.optObjects = Frame(self.Options)   # MainFrame/topFrame/Options/optObjects
+        self.optObjects.pack(side=TOP, expand=YES, fill=BOTH)
+        self.optGeometry = LabelFrame(self.optObjects, bd=2, relief=RIDGE, text='Геометрия')
+        self.optGeometry.grid(column=0, row=0)
+        self.optSymbols = LabelFrame(self.optObjects, bd=2, relief=RIDGE, text='Обозначения')
+        self.optSymbols.grid(column=1, row=0)
+        self.optCanvas = LabelFrame(self.Options, relief=RIDGE, text='Размеры изображения')
+        self.optCanvas.pack(side=TOP, fill=X)
+        self.optOther = LabelFrame(self.Options, relief=RIDGE, text='Прочие настройки')
+        self.optOther.pack(side=TOP, fill=X)
+        ## geometry
+        # 0st column
+        self.cbPoints = CUCheckbuttonG(self.optGeometry, text='Точки', c=0, r=0)
+        self.cbLSegments = CUCheckbuttonG(self.optGeometry, text='Отрезки', c=0, r=1)
+        self.cbPoly2D = CUCheckbuttonG(self.optGeometry, text='Ломаные   ', c=0, r=2)
+        self.cbCurves = CUCheckbuttonG(self.optGeometry, text='Кривые', c=0, r=3, tip=TIP_CURVE)
+        # 1st column
+        self.cbCircles = CUCheckbuttonG(self.optGeometry, text='Окружности', c=1, r=0)
+        self.cbEllipses = CUCheckbuttonG(self.optGeometry, text='Эллипсы', c=1, r=1)
+        self.cbArcs = CUCheckbuttonG(self.optGeometry, text='Дуги окружности', c=1, r=2)
+        self.cbEllipsesArcs = CUCheckbuttonG(self.optGeometry, text='Дуги эллипса', c=1, r=3)
+        self.cbRasters = CUCheckbuttonG(self.optGeometry, text='Растровые изображения', c=1, r=4, tip=TIP_RASTR)
+        # 2st column
+        self.cbColourings = CUCheckbuttonG(self.optGeometry, text='Заливки', c=2, r=0)
+        self.cbHatches = CUCheckbuttonG(self.optGeometry, text='Штриховки', c=2, r=1)
+        self.cbPolygons = CUCheckbuttonG(self.optGeometry, text='Многоугольники', c=2, r=2, tip=TIP_POLYG)
+        self.cbDrawContours = CUCheckbuttonG(self.optGeometry, text='Контуры', c=2, r=3)
+        self.cbMacro = CUCheckbuttonG(self.optGeometry, text='Макрообъекты', c=2, r=4)
+        ## symbols
+        self.cbDrawTexts = CUCheckbuttonG(self.optSymbols, text='Текст', c=0, r=0)
+        self.cbDimensions = CUCheckbuttonG(self.optSymbols, text='Размеры', c=0, r=1)
+        self.cbAxisLines = CUCheckbuttonG(self.optSymbols, text='Осевые линии', c=0, r=2)
+        self.cbCentreMarks = CUCheckbuttonG(self.optSymbols, text='Маркеры центра', c=0, r=3)
+        self.cbLeaders = CUCheckbuttonG(self.optSymbols, text='Выноски', c=0, r=4)
+        ## Canvas's options
+        self.cbFitCanvas = CUCheckbutton(self.optCanvas, text='Подгонять полотно', on=True, tip=TIP_FITCN)
+        self.cbFitCanvas.pack(side=LEFT)
+        Label(self.optCanvas, text='    Ширина обводки, мм').pack(side=LEFT)
+        self.gapcanvas = StringVar(value='1.0')
+        self.eCanvasGap = CFloatEntry(self.optCanvas, textvariable=self.gapcanvas, width=6)
+        self.eCanvasGap.pack(side=LEFT)
+        ## Additional options
+        self.cbMonochrome = CUCheckbutton(self.optOther, text='Оттенки серого', on=True, tip=TIP_GRAYS)
+        self.cbMonochrome.pack(side=LEFT)
+        Label(self.optOther, text='    Толщина основной линии, мм').pack(side=LEFT)
+        self.thickvar = StringVar(value=S_LINE)
+        self.eLineThick = CFloatEntry(self.optOther, textvariable=self.thickvar, width=6)
+        self.eLineThick.pack(side=LEFT)
+        self.cbAllThin = CUCheckbutton(self.optOther, text='Все линии тонкие', on=False, comm=self._disLT)
+        self.cbAllThin.pack(side=LEFT)
+
+    def _makeCommand(self):
+        ## Make subframe for buttons
+        self.commFrame = Frame(self.topFrame, bd=2) # MainFrame/topFrame/commFrame
+        self.commFrame.pack(side=RIGHT, expand=YES, fill=BOTH)
+        Button(self.commFrame, text='Помощь', comm=self.ShowHelp, width=14, height=2).pack(padx=1, pady=1)
+        Button(self.commFrame, text='О программе', comm=self.ShowAbout, width=14, height=2).pack(padx=1, pady=1)
+        self.rbtn = Button(self.commFrame, text='Преобразовать', comm=self.SaveFile, width=14, height=2)
+        self.rbtn.pack(side=BOTTOM, padx=1, pady=1)
+
+    def _makeStateLine(self):
+        ## Make stateline
+        self.stateLine = Frame(self)
+        self.stateLine.pack(side=LEFT, expand=YES, fill=X)
+        self.path = self.document.path
+        self.name = self.document.name
+        self._fname = self.path + self.name
+        Label(self.stateLine, text='Активный документ:').pack(side=LEFT)
+        self.info = info = Entry(self.stateLine, relief=SUNKEN)
+        info.insert(0, self._fname)
+        info.config(state='readonly')
+        info.pack(side=LEFT, expand=YES, fill=X)
+        if not self._fname:
+            self.rbtn.config(state=DISABLED) # Lock convert
+            self.tip = CToolTip(self.stateLine, text=MSGMISSINGDOC)
+            self.stateLine.bind('<Enter>', lambda event: self.tip.show())
+            self.stateLine.bind('<Leave>', lambda event: self.tip.hide())
+        elif not document.valid:
+            self.rbtn.config(state=DISABLED) # Lock convert
+            info.config(fg='red')
+            self.tip = CToolTip(self.stateLine, text=MSGWRONGTYPE)
+            self.stateLine.bind('<Enter>', lambda event: self.tip.show())
+            self.stateLine.bind('<Leave>', lambda event: self.tip.hide())
+
+    def _disLT(self):
+        """ Enable/disable Entry for line-thickness input """
+        state = self.cbAllThin.getVar()
+        if state: self.eLineThick.config(state=DISABLED)
+        else: self.eLineThick.config(state=NORMAL)
+
+    def _getOpt(self):
+        gap, sln = self.gapcanvas.get(), self.thickvar.get()
+        if not gap: gap = 0
+        if not sln: sln = S_LINE
+        return {
+            'S_LINE'        : float(sln),
+            'CANVAS_GAP'    : float(gap),
+            'Points'        : self.cbPoints.getVar(),
+            'LineSegments'  : self.cbLSegments.getVar(),
+            'PolyLines2D'   : self.cbPoly2D.getVar(),
+            'Curves'        : self.cbCurves.getVar(),
+            'Circles'       : self.cbCircles.getVar(),
+            'Ellipses'      : self.cbEllipses.getVar(),
+            'Arcs'          : self.cbArcs.getVar(),
+            'EllipsesArcs'  : self.cbEllipsesArcs.getVar(),
+            'Colourings'    : self.cbColourings.getVar(),
+            'Hatches'       : self.cbHatches.getVar(),
+            'Polygons'      : self.cbPolygons.getVar(),
+            'DrawContours'  : self.cbDrawContours.getVar(),
+            'DrawTexts'     : self.cbDrawTexts.getVar(),
+            'Dimensions'    : self.cbDimensions.getVar(),
+            'AxisLines'     : self.cbAxisLines.getVar(),
+            'CentreMarks'   : self.cbCentreMarks.getVar(),
+            'MacroObject'   : self.cbMacro.getVar(),
+            'Leaders'       : self.cbLeaders.getVar(),
+            'Rasters'       : self.cbRasters.getVar(),
+            'BLACK_WHITE'   : self.cbMonochrome.getVar(),
+            'WIDTH'         : WIDTH,    # TODO: ...
+            'HEIGHT'        : HEIGHT,   # ... add GUI-input W&H?
+            'TOLERANCE'     : TOLERANCE,    # TODO: add GUI-input?
+            'OVERHANG'      : OVERHANG,
+            'ARROWSTYLE'    : 'stroke:none',   # TODO?
+            'KEGEL'         : KEGEL,
+            'D_POINT'       : D_POINT,
+            'ALL_THIN'      : self.cbAllThin.getVar(),
+            'FIT_CANVAS'    : self.cbFitCanvas.getVar(),
+            'MATH_MODE'     : True  # TODO
+        }
+
+    ## ============= interfaces functions ================
+    def ShowAbout(self):
+        sTitle = 'О программе'
+        sAbout = 'Преобразование Компас-фрагмента\nв формат SVG 1.1'
+        tkMessageBox.showinfo(sTitle, sAbout)
+
+    def ShowHelp(self):
+        # TODO: make chm-file and run shell command instead this fucking Toplevel
+        # use os.startfile(fname)   # shell command for opening help
+        def destroy():
+            self.winHelp.destroy()
+            self.winHelp = None
+        if self.winHelp:
+            self.winHelp.focus_set()
+            return
+        self.winHelp = winHelp = Toplevel(root)
+        winHelp.title('Справка')
+        winHelp.attributes('-topmost', True)
+        Message(winHelp, text='КРАТКАЯ СПРАВКА', font=('arial', 16, 'normal'), width=256).pack(fill=X)
+        stext = ScrolledText(winHelp, font=('arial', 10, 'normal'), wrap=WORD)
+        stext.pack(expand=YES, fill=BOTH)
+        stext.insert(END, 'Данный скрипт предназначен для преобразования КОМПАС-фрагментов (*.frw) в файлы SVG (*.svg). ')
+        stext.insert(END, 'Преобразованию подлежат следующие объекты:\n')
+        stext.insert(END, '  * точки\n  * отрезки\n  * ломаные\n  * кривые Безье и NURBS\n')
+        stext.insert(END, '  * окружности и эллипсы\n  * дуги окружностей и эллипсов\n')
+        stext.insert(END, '  * штриховки и заливки\n  * прямоугольники и правильные многоугольники\n')
+        stext.insert(END, '  * контуры\n  * текст на чертеже\n  * размеры\n  * осевые линии и маркеры центра\n')
+        stext.insert(END, '  * линии-выноски\n  * связанные растровые изображения\n  * макрообъекты\n\n')
+        stext.insert(END, 'По умолчанию преобразуются все перечисленные типы объектов. ')
+        stext.insert(END, 'Для преобразования выберите типы объектов, которые требуется передать в SVG-файл, и нажмите "Преобразовать".\n')
+        stext.insert(END, 'Опция "Оттенки серого" включает преобразование цвета заливок в серый, всех остальных объектов - в чёрный.')
+        stext.config(state='disabled')  # this isn't a text editor
+        Button(winHelp, text='OK', command=destroy, width=12).pack(anchor=S, pady=4)
+
+    def SaveFile(self):
+        """ Open 'Save as...' dialog and run converting """
+        fn = tkFileDialog.asksaveasfilename( # Ask filename for writing
+            filetypes=[('Файлы SVG', '.svg')], defaultextension='svg',
+            initialdir=self.path, initialfile=self.name.split('.')[0])
+        if not fn: return
+        sSVG = self.document.Convert(self._getOpt()) # передать журнал вывода сообщений?
+        if sSVG:
+            try:
+                with open(fn, 'w', encoding='utf-8') as f:
+                    f.write(sSVG)   #.encode('utf-8'))
+                iApplication.MessageBoxEx(MSGSUCCESS, MSGTITLE, 64)
+                root.destroy()  # close application after success converting
+            except IOError as e:
+                msg = MSGCANTSAVE + str(e)
+                iApplication.MessageBoxEx(msg, MSGTITLE, 48)
+        else:   # TODO: add a showing of errorlog
+            iApplication.MessageBoxEx(MSGERRCONVERT, MSGTITLE, 48)
+        return
+
+## ================ INITIALIZATION ==================
+document = CDocument(iApplication)
+## ===================== GUI ========================
+root = Tk()
+root.title(MSGTITLE)
+root.attributes('-topmost', True)   # for over all windows
+root.bind('<Key-Escape>', (lambda event: root.destroy()) )  # exit by <ESC>
+CMainWindow(root, document).pack()
+root.mainloop()
