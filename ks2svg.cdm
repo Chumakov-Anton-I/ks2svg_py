@@ -1,10 +1,10 @@
-# coding: cp1251
+# -*- mode: python; coding: windows-1251 -*-
 # ks2svg | Experimental tool for converting KOMPAS-doc to SVG-format
 # Version 0.3beta for Python 2.X (v2.6 and newer) - Class based
 # Chumakov Anton I., Juny 2021
 # Last revised: Aug 15, 2022
 
-import pythoncom    # Требуется для интерактивной работы из-под Компаса
+import pythoncom    # Г’Г°ГҐГЎГіГҐГІГ±Гї Г¤Г«Гї ГЁГ­ГІГҐГ°Г ГЄГІГЁГўГ­Г®Г© Г°Г ГЎГ®ГІГ» ГЁГ§-ГЇГ®Г¤ ГЉГ®Г¬ГЇГ Г±Г 
 from tkinter import *
 from tkinter.scrolledtext import ScrolledText
 import tkinter.filedialog as tkFileDialog
@@ -23,17 +23,17 @@ KEGEL = 4   # [px] fonts height
 
 ## Text constants (for localization)
 MSGTITLE = 'Converting FRW to SVG'
-MSGWRONGTYPE = 'Активный документ не является КОМПАС-фрагментом'
-MSGSUCCESS = 'Преобразование успешно завершено!'
-MSGMISSINGDOC = 'Отсутствует открытый документ'
-MSGCANTSAVE = 'Ошибка записи файла'
-MSGERRCONVERT = 'Ошибка преобразования!'
+MSGWRONGTYPE = 'ГЂГЄГІГЁГўГ­Г»Г© Г¤Г®ГЄГіГ¬ГҐГ­ГІ Г­ГҐ ГїГўГ«ГїГҐГІГ±Гї ГЉГЋГЊГЏГЂГ‘-ГґГ°Г ГЈГ¬ГҐГ­ГІГ®Г¬'
+MSGSUCCESS = 'ГЏГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ Г­ГЁГҐ ГіГ±ГЇГҐГёГ­Г® Г§Г ГўГҐГ°ГёГҐГ­Г®!'
+MSGMISSINGDOC = 'ГЋГІГ±ГіГІГ±ГІГўГіГҐГІ Г®ГІГЄГ°Г»ГІГ»Г© Г¤Г®ГЄГіГ¬ГҐГ­ГІ'
+MSGCANTSAVE = 'ГЋГёГЁГЎГЄГ  Г§Г ГЇГЁГ±ГЁ ГґГ Г©Г«Г '
+MSGERRCONVERT = 'ГЋГёГЁГЎГЄГ  ГЇГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ Г­ГЁГї!'
 # HINTS
-TIP_CURVE = 'Преобразование кривых Безье и NURBS.\nПримечание: NURBS аппроксимируются набором отрезков.'
-TIP_POLYG = 'Преобразование прямоугольников и правильных многоугольников'
-TIP_GRAYS = 'Преобразовать цвет заливок в оттенки серого,\nостальных объектов в чёрный'
-TIP_RASTR = 'Преобразование связанных растровых изображений.\nВнимание: внедерённые изображения пропускаются.'
-TIP_FITCN = 'Подгонять размер изображения\nк габаритам объектов фрагмента'
+TIP_CURVE = 'ГЏГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ Г­ГЁГҐ ГЄГ°ГЁГўГ»Гµ ГЃГҐГ§ГјГҐ ГЁ NURBS.\nГЏГ°ГЁГ¬ГҐГ·Г Г­ГЁГҐ: NURBS Г ГЇГЇГ°Г®ГЄГ±ГЁГ¬ГЁГ°ГіГѕГІГ±Гї Г­Г ГЎГ®Г°Г®Г¬ Г®ГІГ°ГҐГ§ГЄГ®Гў.'
+TIP_POLYG = 'ГЏГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ Г­ГЁГҐ ГЇГ°ГїГ¬Г®ГіГЈГ®Г«ГјГ­ГЁГЄГ®Гў ГЁ ГЇГ°Г ГўГЁГ«ГјГ­Г»Гµ Г¬Г­Г®ГЈГ®ГіГЈГ®Г«ГјГ­ГЁГЄГ®Гў'
+TIP_GRAYS = 'ГЏГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ ГІГј Г¶ГўГҐГІ Г§Г Г«ГЁГўГ®ГЄ Гў Г®ГІГІГҐГ­ГЄГЁ Г±ГҐГ°Г®ГЈГ®,\nГ®Г±ГІГ Г«ГјГ­Г»Гµ Г®ГЎГєГҐГЄГІГ®Гў Гў Г·ВёГ°Г­Г»Г©'
+TIP_RASTR = 'ГЏГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ Г­ГЁГҐ Г±ГўГїГ§Г Г­Г­Г»Гµ Г°Г Г±ГІГ°Г®ГўГ»Гµ ГЁГ§Г®ГЎГ°Г Г¦ГҐГ­ГЁГ©.\nГ‚Г­ГЁГ¬Г Г­ГЁГҐ: ГўГ­ГҐГ¤ГҐГ°ВёГ­Г­Г»ГҐ ГЁГ§Г®ГЎГ°Г Г¦ГҐГ­ГЁГї ГЇГ°Г®ГЇГіГ±ГЄГ ГѕГІГ±Гї.'
+TIP_FITCN = 'ГЏГ®Г¤ГЈГ®Г­ГїГІГј Г°Г Г§Г¬ГҐГ° ГЁГ§Г®ГЎГ°Г Г¦ГҐГ­ГЁГї\nГЄ ГЈГ ГЎГ Г°ГЁГІГ Г¬ Г®ГЎГєГҐГЄГІГ®Гў ГґГ°Г ГЈГ¬ГҐГ­ГІГ '
 
 ## ================== Helper GUI classes ===================
 class CToolTip(object):
@@ -124,62 +124,62 @@ class CMainWindow(Frame):
         self.Options.pack(side=LEFT)
         self.optObjects = Frame(self.Options)   # MainFrame/topFrame/Options/optObjects
         self.optObjects.pack(side=TOP, expand=YES, fill=BOTH)
-        self.optGeometry = LabelFrame(self.optObjects, bd=2, relief=RIDGE, text='Геометрия')
+        self.optGeometry = LabelFrame(self.optObjects, bd=2, relief=RIDGE, text='ГѓГҐГ®Г¬ГҐГІГ°ГЁГї')
         self.optGeometry.grid(column=0, row=0)
-        self.optSymbols = LabelFrame(self.optObjects, bd=2, relief=RIDGE, text='Обозначения')
+        self.optSymbols = LabelFrame(self.optObjects, bd=2, relief=RIDGE, text='ГЋГЎГ®Г§Г­Г Г·ГҐГ­ГЁГї')
         self.optSymbols.grid(column=1, row=0)
-        self.optCanvas = LabelFrame(self.Options, relief=RIDGE, text='Размеры изображения')
+        self.optCanvas = LabelFrame(self.Options, relief=RIDGE, text='ГђГ Г§Г¬ГҐГ°Г» ГЁГ§Г®ГЎГ°Г Г¦ГҐГ­ГЁГї')
         self.optCanvas.pack(side=TOP, fill=X)
-        self.optOther = LabelFrame(self.Options, relief=RIDGE, text='Прочие настройки')
+        self.optOther = LabelFrame(self.Options, relief=RIDGE, text='ГЏГ°Г®Г·ГЁГҐ Г­Г Г±ГІГ°Г®Г©ГЄГЁ')
         self.optOther.pack(side=TOP, fill=X)
         ## geometry
         # 0st column
-        self.cbPoints = CUCheckbuttonG(self.optGeometry, text='Точки', c=0, r=0)
-        self.cbLSegments = CUCheckbuttonG(self.optGeometry, text='Отрезки', c=0, r=1)
-        self.cbPoly2D = CUCheckbuttonG(self.optGeometry, text='Ломаные   ', c=0, r=2)
-        self.cbCurves = CUCheckbuttonG(self.optGeometry, text='Кривые', c=0, r=3, tip=TIP_CURVE)
+        self.cbPoints = CUCheckbuttonG(self.optGeometry, text='Г’Г®Г·ГЄГЁ', c=0, r=0)
+        self.cbLSegments = CUCheckbuttonG(self.optGeometry, text='ГЋГІГ°ГҐГ§ГЄГЁ', c=0, r=1)
+        self.cbPoly2D = CUCheckbuttonG(self.optGeometry, text='Г‹Г®Г¬Г Г­Г»ГҐ   ', c=0, r=2)
+        self.cbCurves = CUCheckbuttonG(self.optGeometry, text='ГЉГ°ГЁГўГ»ГҐ', c=0, r=3, tip=TIP_CURVE)
         # 1st column
-        self.cbCircles = CUCheckbuttonG(self.optGeometry, text='Окружности', c=1, r=0)
-        self.cbEllipses = CUCheckbuttonG(self.optGeometry, text='Эллипсы', c=1, r=1)
-        self.cbArcs = CUCheckbuttonG(self.optGeometry, text='Дуги окружности', c=1, r=2)
-        self.cbEllipsesArcs = CUCheckbuttonG(self.optGeometry, text='Дуги эллипса', c=1, r=3)
-        self.cbRasters = CUCheckbuttonG(self.optGeometry, text='Растровые изображения', c=1, r=4, tip=TIP_RASTR)
+        self.cbCircles = CUCheckbuttonG(self.optGeometry, text='ГЋГЄГ°ГіГ¦Г­Г®Г±ГІГЁ', c=1, r=0)
+        self.cbEllipses = CUCheckbuttonG(self.optGeometry, text='ГќГ«Г«ГЁГЇГ±Г»', c=1, r=1)
+        self.cbArcs = CUCheckbuttonG(self.optGeometry, text='Г„ГіГЈГЁ Г®ГЄГ°ГіГ¦Г­Г®Г±ГІГЁ', c=1, r=2)
+        self.cbEllipsesArcs = CUCheckbuttonG(self.optGeometry, text='Г„ГіГЈГЁ ГЅГ«Г«ГЁГЇГ±Г ', c=1, r=3)
+        self.cbRasters = CUCheckbuttonG(self.optGeometry, text='ГђГ Г±ГІГ°Г®ГўГ»ГҐ ГЁГ§Г®ГЎГ°Г Г¦ГҐГ­ГЁГї', c=1, r=4, tip=TIP_RASTR)
         # 2st column
-        self.cbColourings = CUCheckbuttonG(self.optGeometry, text='Заливки', c=2, r=0)
-        self.cbHatches = CUCheckbuttonG(self.optGeometry, text='Штриховки', c=2, r=1)
-        self.cbPolygons = CUCheckbuttonG(self.optGeometry, text='Многоугольники', c=2, r=2, tip=TIP_POLYG)
-        self.cbDrawContours = CUCheckbuttonG(self.optGeometry, text='Контуры', c=2, r=3)
-        self.cbMacro = CUCheckbuttonG(self.optGeometry, text='Макрообъекты', c=2, r=4)
+        self.cbColourings = CUCheckbuttonG(self.optGeometry, text='Г‡Г Г«ГЁГўГЄГЁ', c=2, r=0)
+        self.cbHatches = CUCheckbuttonG(self.optGeometry, text='ГГІГ°ГЁГµГ®ГўГЄГЁ', c=2, r=1)
+        self.cbPolygons = CUCheckbuttonG(self.optGeometry, text='ГЊГ­Г®ГЈГ®ГіГЈГ®Г«ГјГ­ГЁГЄГЁ', c=2, r=2, tip=TIP_POLYG)
+        self.cbDrawContours = CUCheckbuttonG(self.optGeometry, text='ГЉГ®Г­ГІГіГ°Г»', c=2, r=3)
+        self.cbMacro = CUCheckbuttonG(self.optGeometry, text='ГЊГ ГЄГ°Г®Г®ГЎГєГҐГЄГІГ»', c=2, r=4)
         ## symbols
-        self.cbDrawTexts = CUCheckbuttonG(self.optSymbols, text='Текст', c=0, r=0)
-        self.cbDimensions = CUCheckbuttonG(self.optSymbols, text='Размеры', c=0, r=1)
-        self.cbAxisLines = CUCheckbuttonG(self.optSymbols, text='Осевые линии', c=0, r=2)
-        self.cbCentreMarks = CUCheckbuttonG(self.optSymbols, text='Маркеры центра', c=0, r=3)
-        self.cbLeaders = CUCheckbuttonG(self.optSymbols, text='Выноски', c=0, r=4)
+        self.cbDrawTexts = CUCheckbuttonG(self.optSymbols, text='Г’ГҐГЄГ±ГІ', c=0, r=0)
+        self.cbDimensions = CUCheckbuttonG(self.optSymbols, text='ГђГ Г§Г¬ГҐГ°Г»', c=0, r=1)
+        self.cbAxisLines = CUCheckbuttonG(self.optSymbols, text='ГЋГ±ГҐГўГ»ГҐ Г«ГЁГ­ГЁГЁ', c=0, r=2)
+        self.cbCentreMarks = CUCheckbuttonG(self.optSymbols, text='ГЊГ Г°ГЄГҐГ°Г» Г¶ГҐГ­ГІГ°Г ', c=0, r=3)
+        self.cbLeaders = CUCheckbuttonG(self.optSymbols, text='Г‚Г»Г­Г®Г±ГЄГЁ', c=0, r=4)
         ## Canvas's options
-        self.cbFitCanvas = CUCheckbutton(self.optCanvas, text='Подгонять полотно', on=True, tip=TIP_FITCN)
+        self.cbFitCanvas = CUCheckbutton(self.optCanvas, text='ГЏГ®Г¤ГЈГ®Г­ГїГІГј ГЇГ®Г«Г®ГІГ­Г®', on=True, tip=TIP_FITCN)
         self.cbFitCanvas.pack(side=LEFT)
-        Label(self.optCanvas, text='    Ширина обводки, мм').pack(side=LEFT)
+        Label(self.optCanvas, text='    ГГЁГ°ГЁГ­Г  Г®ГЎГўГ®Г¤ГЄГЁ, Г¬Г¬').pack(side=LEFT)
         self.gapcanvas = StringVar(value='1.0')
         self.eCanvasGap = CFloatEntry(self.optCanvas, textvariable=self.gapcanvas, width=6)
         self.eCanvasGap.pack(side=LEFT)
         ## Additional options
-        self.cbMonochrome = CUCheckbutton(self.optOther, text='Оттенки серого', on=True, tip=TIP_GRAYS)
+        self.cbMonochrome = CUCheckbutton(self.optOther, text='ГЋГІГІГҐГ­ГЄГЁ Г±ГҐГ°Г®ГЈГ®', on=True, tip=TIP_GRAYS)
         self.cbMonochrome.pack(side=LEFT)
-        Label(self.optOther, text='    Толщина основной линии, мм').pack(side=LEFT)
+        Label(self.optOther, text='    Г’Г®Г«Г№ГЁГ­Г  Г®Г±Г­Г®ГўГ­Г®Г© Г«ГЁГ­ГЁГЁ, Г¬Г¬').pack(side=LEFT)
         self.thickvar = StringVar(value=S_LINE)
         self.eLineThick = CFloatEntry(self.optOther, textvariable=self.thickvar, width=6)
         self.eLineThick.pack(side=LEFT)
-        self.cbAllThin = CUCheckbutton(self.optOther, text='Все линии тонкие', on=False, comm=self._disLT)
+        self.cbAllThin = CUCheckbutton(self.optOther, text='Г‚Г±ГҐ Г«ГЁГ­ГЁГЁ ГІГ®Г­ГЄГЁГҐ', on=False, comm=self._disLT)
         self.cbAllThin.pack(side=LEFT)
 
     def _makeCommand(self):
         ## Make subframe for buttons
         self.commFrame = Frame(self.topFrame, bd=2) # MainFrame/topFrame/commFrame
         self.commFrame.pack(side=RIGHT, expand=YES, fill=BOTH)
-        Button(self.commFrame, text='Помощь', comm=self.ShowHelp, width=14, height=2).pack(padx=1, pady=1)
-        Button(self.commFrame, text='О программе', comm=self.ShowAbout, width=14, height=2).pack(padx=1, pady=1)
-        self.rbtn = Button(self.commFrame, text='Преобразовать', comm=self.SaveFile, width=14, height=2)
+        Button(self.commFrame, text='ГЏГ®Г¬Г®Г№Гј', comm=self.ShowHelp, width=14, height=2).pack(padx=1, pady=1)
+        Button(self.commFrame, text='ГЋ ГЇГ°Г®ГЈГ°Г Г¬Г¬ГҐ', comm=self.ShowAbout, width=14, height=2).pack(padx=1, pady=1)
+        self.rbtn = Button(self.commFrame, text='ГЏГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ ГІГј', comm=self.SaveFile, width=14, height=2)
         self.rbtn.pack(side=BOTTOM, padx=1, pady=1)
 
     def _makeStateLine(self):
@@ -189,7 +189,7 @@ class CMainWindow(Frame):
         self.path = self.document.path
         self.name = self.document.name
         self._fname = self.path + self.name
-        Label(self.stateLine, text='Активный документ:').pack(side=LEFT)
+        Label(self.stateLine, text='ГЂГЄГІГЁГўГ­Г»Г© Г¤Г®ГЄГіГ¬ГҐГ­ГІ:').pack(side=LEFT)
         self.info = info = Entry(self.stateLine, relief=SUNKEN)
         info.insert(0, self._fname)
         info.config(state='readonly')
@@ -253,8 +253,8 @@ class CMainWindow(Frame):
 
     ## ============= interfaces functions ================
     def ShowAbout(self):
-        sTitle = 'О программе'
-        sAbout = 'Преобразование Компас-фрагмента\nв формат SVG 1.1'
+        sTitle = 'ГЋ ГЇГ°Г®ГЈГ°Г Г¬Г¬ГҐ'
+        sAbout = 'ГЏГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ Г­ГЁГҐ ГЉГ®Г¬ГЇГ Г±-ГґГ°Г ГЈГ¬ГҐГ­ГІГ \nГў ГґГ®Г°Г¬Г ГІ SVG 1.1'
         tkMessageBox.showinfo(sTitle, sAbout)
 
     def ShowHelp(self):
@@ -267,31 +267,31 @@ class CMainWindow(Frame):
             self.winHelp.focus_set()
             return
         self.winHelp = winHelp = Toplevel(root)
-        winHelp.title('Справка')
+        winHelp.title('Г‘ГЇГ°Г ГўГЄГ ')
         winHelp.attributes('-topmost', True)
-        Message(winHelp, text='КРАТКАЯ СПРАВКА', font=('arial', 16, 'normal'), width=256).pack(fill=X)
+        Message(winHelp, text='ГЉГђГЂГ’ГЉГЂГџ Г‘ГЏГђГЂГ‚ГЉГЂ', font=('arial', 16, 'normal'), width=256).pack(fill=X)
         stext = ScrolledText(winHelp, font=('arial', 10, 'normal'), wrap=WORD)
         stext.pack(expand=YES, fill=BOTH)
-        stext.insert(END, 'Данный скрипт предназначен для преобразования КОМПАС-фрагментов (*.frw) в файлы SVG (*.svg). ')
-        stext.insert(END, 'Преобразованию подлежат следующие объекты:\n')
-        stext.insert(END, '  * точки\n  * отрезки\n  * ломаные\n  * кривые Безье и NURBS\n')
-        stext.insert(END, '  * окружности и эллипсы\n  * дуги окружностей и эллипсов\n')
-        stext.insert(END, '  * штриховки и заливки\n  * прямоугольники и правильные многоугольники\n')
-        stext.insert(END, '  * контуры\n  * текст на чертеже\n  * размеры\n  * осевые линии и маркеры центра\n')
-        stext.insert(END, '  * линии-выноски\n  * связанные растровые изображения\n  * макрообъекты\n\n')
-        stext.insert(END, 'По умолчанию преобразуются все перечисленные типы объектов. ')
-        stext.insert(END, 'Для преобразования выберите типы объектов, которые требуется передать в SVG-файл, и нажмите "Преобразовать".\n')
-        stext.insert(END, 'Опция "Оттенки серого" включает преобразование цвета заливок в серый, всех остальных объектов - в чёрный.')
+        stext.insert(END, 'Г„Г Г­Г­Г»Г© Г±ГЄГ°ГЁГЇГІ ГЇГ°ГҐГ¤Г­Г Г§Г­Г Г·ГҐГ­ Г¤Г«Гї ГЇГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ Г­ГЁГї ГЉГЋГЊГЏГЂГ‘-ГґГ°Г ГЈГ¬ГҐГ­ГІГ®Гў (*.frw) Гў ГґГ Г©Г«Г» SVG (*.svg). ')
+        stext.insert(END, 'ГЏГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ Г­ГЁГѕ ГЇГ®Г¤Г«ГҐГ¦Г ГІ Г±Г«ГҐГ¤ГіГѕГ№ГЁГҐ Г®ГЎГєГҐГЄГІГ»:\n')
+        stext.insert(END, '  * ГІГ®Г·ГЄГЁ\n  * Г®ГІГ°ГҐГ§ГЄГЁ\n  * Г«Г®Г¬Г Г­Г»ГҐ\n  * ГЄГ°ГЁГўГ»ГҐ ГЃГҐГ§ГјГҐ ГЁ NURBS\n')
+        stext.insert(END, '  * Г®ГЄГ°ГіГ¦Г­Г®Г±ГІГЁ ГЁ ГЅГ«Г«ГЁГЇГ±Г»\n  * Г¤ГіГЈГЁ Г®ГЄГ°ГіГ¦Г­Г®Г±ГІГҐГ© ГЁ ГЅГ«Г«ГЁГЇГ±Г®Гў\n')
+        stext.insert(END, '  * ГёГІГ°ГЁГµГ®ГўГЄГЁ ГЁ Г§Г Г«ГЁГўГЄГЁ\n  * ГЇГ°ГїГ¬Г®ГіГЈГ®Г«ГјГ­ГЁГЄГЁ ГЁ ГЇГ°Г ГўГЁГ«ГјГ­Г»ГҐ Г¬Г­Г®ГЈГ®ГіГЈГ®Г«ГјГ­ГЁГЄГЁ\n')
+        stext.insert(END, '  * ГЄГ®Г­ГІГіГ°Г»\n  * ГІГҐГЄГ±ГІ Г­Г  Г·ГҐГ°ГІГҐГ¦ГҐ\n  * Г°Г Г§Г¬ГҐГ°Г»\n  * Г®Г±ГҐГўГ»ГҐ Г«ГЁГ­ГЁГЁ ГЁ Г¬Г Г°ГЄГҐГ°Г» Г¶ГҐГ­ГІГ°Г \n')
+        stext.insert(END, '  * Г«ГЁГ­ГЁГЁ-ГўГ»Г­Г®Г±ГЄГЁ\n  * Г±ГўГїГ§Г Г­Г­Г»ГҐ Г°Г Г±ГІГ°Г®ГўГ»ГҐ ГЁГ§Г®ГЎГ°Г Г¦ГҐГ­ГЁГї\n  * Г¬Г ГЄГ°Г®Г®ГЎГєГҐГЄГІГ»\n\n')
+        stext.insert(END, 'ГЏГ® ГіГ¬Г®Г«Г·Г Г­ГЁГѕ ГЇГ°ГҐГ®ГЎГ°Г Г§ГіГѕГІГ±Гї ГўГ±ГҐ ГЇГҐГ°ГҐГ·ГЁГ±Г«ГҐГ­Г­Г»ГҐ ГІГЁГЇГ» Г®ГЎГєГҐГЄГІГ®Гў. ')
+        stext.insert(END, 'Г„Г«Гї ГЇГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ Г­ГЁГї ГўГ»ГЎГҐГ°ГЁГІГҐ ГІГЁГЇГ» Г®ГЎГєГҐГЄГІГ®Гў, ГЄГ®ГІГ®Г°Г»ГҐ ГІГ°ГҐГЎГіГҐГІГ±Гї ГЇГҐГ°ГҐГ¤Г ГІГј Гў SVG-ГґГ Г©Г«, ГЁ Г­Г Г¦Г¬ГЁГІГҐ "ГЏГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ ГІГј".\n')
+        stext.insert(END, 'ГЋГЇГ¶ГЁГї "ГЋГІГІГҐГ­ГЄГЁ Г±ГҐГ°Г®ГЈГ®" ГўГЄГ«ГѕГ·Г ГҐГІ ГЇГ°ГҐГ®ГЎГ°Г Г§Г®ГўГ Г­ГЁГҐ Г¶ГўГҐГІГ  Г§Г Г«ГЁГўГ®ГЄ Гў Г±ГҐГ°Г»Г©, ГўГ±ГҐГµ Г®Г±ГІГ Г«ГјГ­Г»Гµ Г®ГЎГєГҐГЄГІГ®Гў - Гў Г·ВёГ°Г­Г»Г©.')
         stext.config(state='disabled')  # this isn't a text editor
         Button(winHelp, text='OK', command=destroy, width=12).pack(anchor=S, pady=4)
 
     def SaveFile(self):
         """ Open 'Save as...' dialog and run converting """
         fn = tkFileDialog.asksaveasfilename( # Ask filename for writing
-            filetypes=[('Файлы SVG', '.svg')], defaultextension='svg',
+            filetypes=[('Г”Г Г©Г«Г» SVG', '.svg')], defaultextension='svg',
             initialdir=self.path, initialfile=self.name.split('.')[0])
         if not fn: return
-        sSVG = self.document.Convert(self._getOpt()) # передать журнал вывода сообщений?
+        sSVG = self.document.Convert(self._getOpt()) # ГЇГҐГ°ГҐГ¤Г ГІГј Г¦ГіГ°Г­Г Г« ГўГ»ГўГ®Г¤Г  Г±Г®Г®ГЎГ№ГҐГ­ГЁГ©?
         if sSVG:
             try:
                 with open(fn, 'w', encoding='utf-8') as f:
